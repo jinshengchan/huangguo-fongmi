@@ -1,9 +1,13 @@
 // huangguo_fongmi.js
 // FongMi / 影视TV QuickJS Spider adapter
 // Adapted from Yswag/xptv-extensions huangguo.js
+import 'assets://js/lib/crypto-js.js';
 
 const SITE = 'https://huangguoai.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const IMG_KEY = 'f5d965df75336270';
+const IMG_IV = '97b60394abc2fbe1';
+const EMPTY_IMAGE = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=';
 
 const HEADERS = {
   'User-Agent': UA,
@@ -26,6 +30,42 @@ function fix(u) {
   if (u.indexOf('//') === 0) return 'https:' + u;
   if (u.indexOf('/') === 0) return SITE + u;
   return u;
+}
+
+function coverUrl(u) {
+  u = fix(u).replace(/\?.*$/, '');
+  if (!/^https?:\/\//i.test(u)) return '';
+  return getProxy(true) + '&siteKey=huangguo_fongmi&url=' + encodeURIComponent(u);
+}
+
+function imageType(b64) {
+  if (b64.indexOf('/9j/') === 0) return 'image/jpeg';
+  if (b64.indexOf('iVBOR') === 0) return 'image/png';
+  if (b64.indexOf('UklGR') === 0) return 'image/webp';
+  if (b64.indexOf('R0lGOD') === 0) return 'image/gif';
+  return '';
+}
+
+function decryptCover(b64) {
+  if (imageType(b64)) return b64;
+  const ciphertext = CryptoJS.enc.Base64.parse(b64);
+  if (!ciphertext.sigBytes || ciphertext.sigBytes % 16) return '';
+  const plaintext = CryptoJS.AES.decrypt(
+    { ciphertext: ciphertext }, CryptoJS.enc.Utf8.parse(IMG_KEY),
+    { iv: CryptoJS.enc.Utf8.parse(IMG_IV), mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.NoPadding }
+  );
+  let hex = CryptoJS.enc.Hex.stringify(plaintext).toLowerCase();
+  if (!/^(ffd8|89504e470d0a1a0a|52494646|47494638)/.test(hex)) return '';
+  const pad = parseInt(hex.slice(-2), 16);
+  if (pad > 0 && pad <= 16 && hex.slice(-2 * pad) === pad.toString(16).padStart(2, '0').repeat(pad)) {
+    hex = hex.slice(0, -2 * pad);
+  }
+  let end = hex.lastIndexOf('ffd9');
+  if (hex.indexOf('ffd8') === 0 && end >= 0) hex = hex.slice(0, end + 4);
+  end = hex.lastIndexOf('49454e44ae426082');
+  if (hex.indexOf('89504e47') === 0 && end >= 0) hex = hex.slice(0, end + 16);
+  const out = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Hex.parse(hex));
+  return imageType(out) ? out : '';
 }
 
 function stripTags(s) {
@@ -102,7 +142,7 @@ function parseCardBlock(block) {
   return {
     vod_id: vid,
     vod_name: title,
-    vod_pic: fix(imgM ? imgM[1] : ''),
+    vod_pic: coverUrl(imgM ? imgM[1] : ''),
     vod_remarks: rem && sc ? rem + ' · ' + sc : (rem || sc)
   };
 }
@@ -177,7 +217,7 @@ function parseRanks(html) {
     list.push({
       vod_id: id,
       vod_name: title,
-      vod_pic: fix(imgM ? imgM[1] : ''),
+      vod_pic: coverUrl(imgM ? imgM[1] : ''),
       vod_remarks: tags ? stripTags(tags[1]) : ''
     });
   }
@@ -194,11 +234,18 @@ function parseTitle(html, fallback) {
 }
 
 function parsePic(html) {
+  const data = html.match(/id=["']videoInitialData["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (data) {
+    try {
+      const pic = JSON.parse(data[1]).coverSrc;
+      if (pic) return coverUrl(pic);
+    } catch (e) {}
+  }
   const og = html.match(/<meta\b[^>]*(?:property|name)="og:image"[^>]*content="([^"]+)"[^>]*>/i) ||
              html.match(/<meta\b[^>]*content="([^"]+)"[^>]*(?:property|name)="og:image"[^>]*>/i);
-  if (og) return fix(og[1]);
+  if (og) return coverUrl(og[1]);
   const pic = html.match(/<img\b[^>]*(?:class="[^"]*hg-web-detail[^\"]*"[^>]*)?(?:data-src|src)="([^"]+)"/i);
-  return fix(pic ? pic[1] : '');
+  return coverUrl(pic ? pic[1] : '');
 }
 
 function parseEpisodes(html, id) {
@@ -394,6 +441,20 @@ export default {
       });
     } catch (e) {
       return JSON.stringify({ parse: 0, url: '' });
+    }
+  },
+
+  proxy(params) {
+    try {
+      const url = String(params && params.url || '');
+      if (!/^https?:\/\//i.test(url)) return [200, 'image/png', EMPTY_IMAGE, {}, 1];
+      const r = req(url, { method: 'get', headers: HEADERS, buffer: 2, timeout: 7000 });
+      if (!r || Number(r.code) !== 200 || !r.content) return [200, 'image/png', EMPTY_IMAGE, {}, 1];
+      const image = decryptCover(String(r.content));
+      if (!image) return [200, 'image/png', EMPTY_IMAGE, {}, 1];
+      return [200, imageType(image), image, { 'Cache-Control': 'public, max-age=3600' }, 1];
+    } catch (e) {
+      return [200, 'image/png', EMPTY_IMAGE, {}, 1];
     }
   }
 };
