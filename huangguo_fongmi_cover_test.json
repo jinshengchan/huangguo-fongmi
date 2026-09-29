@@ -1,0 +1,14 @@
+{
+  "sites": [
+    {
+      "key": "huangguo_fongmi_cover_test",
+      "name": "黄果短剧（封面测试）",
+      "type": 3,
+      "api": "https://github.com/jinshengchan/huangguo-fongmi/raw/refs/heads/main/huangguo_fongmi_cover_test.js",
+      "searchable": 1,
+      "quickSearch": 0,
+      "filterable": 0,
+      "changeable": 0
+    }
+  ]
+}
