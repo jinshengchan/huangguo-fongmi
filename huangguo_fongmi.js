@@ -4,8 +4,6 @@
 
 const SITE = 'https://huangguoai.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const IMG_KEY = 'f5d965df75336270';
-const IMG_IV = '97b60394abc2fbe1';
 
 const HEADERS = {
   'User-Agent': UA,
@@ -28,21 +26,6 @@ function fix(u) {
   if (u.indexOf('//') === 0) return 'https:' + u;
   if (u.indexOf('/') === 0) return SITE + u;
   return u;
-}
-
-function coverUrl(u) {
-  u = fix(u);
-  if (!/^https?:\/\//i.test(u)) return '';
-  // The CDN returns AES-encrypted image bytes. Route covers through this spider.
-  return getProxy(true) + '&siteKey=huangguo_fongmi&url=' + encodeURIComponent(u);
-}
-
-function imageType(b64) {
-  if (b64.indexOf('/9j/') === 0) return 'image/jpeg';
-  if (b64.indexOf('iVBOR') === 0) return 'image/png';
-  if (b64.indexOf('UklGR') === 0) return 'image/webp';
-  if (b64.indexOf('R0lGOD') === 0) return 'image/gif';
-  return '';
 }
 
 function stripTags(s) {
@@ -119,7 +102,7 @@ function parseCardBlock(block) {
   return {
     vod_id: vid,
     vod_name: title,
-    vod_pic: coverUrl(imgM ? imgM[1] : ''),
+    vod_pic: fix(imgM ? imgM[1] : ''),
     vod_remarks: rem && sc ? rem + ' · ' + sc : (rem || sc)
   };
 }
@@ -194,7 +177,7 @@ function parseRanks(html) {
     list.push({
       vod_id: id,
       vod_name: title,
-      vod_pic: coverUrl(imgM ? imgM[1] : ''),
+      vod_pic: fix(imgM ? imgM[1] : ''),
       vod_remarks: tags ? stripTags(tags[1]) : ''
     });
   }
@@ -213,9 +196,9 @@ function parseTitle(html, fallback) {
 function parsePic(html) {
   const og = html.match(/<meta\b[^>]*(?:property|name)="og:image"[^>]*content="([^"]+)"[^>]*>/i) ||
              html.match(/<meta\b[^>]*content="([^"]+)"[^>]*(?:property|name)="og:image"[^>]*>/i);
-  if (og) return coverUrl(og[1]);
+  if (og) return fix(og[1]);
   const pic = html.match(/<img\b[^>]*(?:class="[^"]*hg-web-detail[^\"]*"[^>]*)?(?:data-src|src)="([^"]+)"/i);
-  return coverUrl(pic ? pic[1] : '');
+  return fix(pic ? pic[1] : '');
 }
 
 function parseEpisodes(html, id) {
@@ -411,26 +394,6 @@ export default {
       });
     } catch (e) {
       return JSON.stringify({ parse: 0, url: '' });
-    }
-  },
-
-  proxy(params) {
-    try {
-      const url = String(params && params.url || '');
-      if (!/^https?:\/\//i.test(url)) return [400, 'text/plain', 'Invalid image URL'];
-      const r = req(url, { method: 'get', headers: HEADERS, buffer: 2, timeout: 15000 });
-      if (!r || Number(r.code) !== 200 || !r.content) return [502, 'text/plain', 'Image fetch failed'];
-
-      const raw = String(r.content);
-      // FongMi's aesX decodes the base64 response and removes PKCS7 padding.
-      // An unencrypted image is returned unchanged.
-      const decrypted = imageType(raw) ? ''
-        : aesX('AES/CBC', false, raw, true, IMG_KEY, IMG_IV, true);
-      const image = imageType(decrypted) ? decrypted : raw;
-      const mime = imageType(image) || 'application/octet-stream';
-      return [200, mime, image, { 'Cache-Control': 'public, max-age=3600' }, 1];
-    } catch (e) {
-      return [502, 'text/plain', 'Image proxy failed'];
     }
   }
 };
