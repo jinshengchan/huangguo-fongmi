@@ -9,6 +9,6 @@
 
 ## 使用
 
-文件提交后，在支持 QuickJS Spider 的 FongMi / 影视TV 客户端中导入配置文件的 Raw 地址。配置中的 `api` 指向同目录的脚本文件；若客户端不支持相对地址，可改为脚本的 Raw 地址。
+打开 [`huangguo_fongmi_config.json`](./huangguo_fongmi_config.json)，点击 **Raw** 并复制其地址。在支持 QuickJS Spider 的 FongMi / 影视TV 客户端中导入这个配置地址。配置内的 `api` 已指向仓库中的脚本绝对地址。
 
 目前仅完成脚本语法和 JSON 格式检查，尚未在安卓客户端实测。网站接口与页面结构发生变化时，源可能需要更新。
