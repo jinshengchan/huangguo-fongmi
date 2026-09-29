@@ -1,0 +1,14 @@
+{
+  "sites": [
+    {
+      "key": "huangguo_fongmi",
+      "name": "黄果短剧",
+      "type": 3,
+      "api": "./huangguo_fongmi.js",
+      "searchable": 1,
+      "quickSearch": 0,
+      "filterable": 0,
+      "changeable": 0
+    }
+  ]
+}
